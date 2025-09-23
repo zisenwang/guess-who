@@ -1,10 +1,10 @@
-import {GameResponses, GameStatus, Player, Room} from './types';
+import {GameResponses, GameStatus, Player, Room, SocketEvent} from './types';
 import {RoomManager} from './roomManager';
 
 export class GameManager {
   constructor(private roomManager: RoomManager) {}
 
-  joinGame(playerId: string, roomId: string, nickname: string): { success: boolean; error?: string; initData?: GameResponses['init_state'] } {
+  joinGame(playerId: string, roomId: string, nickname: string): { success: boolean; error?: string } {
     let room = this.roomManager.getRoom(roomId);
 
     if (!room) {
@@ -17,21 +17,17 @@ export class GameManager {
       return { success: false, error: result.error };
     }
 
-    const player = room.players.get(playerId)!;
-    const otherPlayer = Array.from(room.players.values()).find(p => p.id !== playerId);
-
-    const initData: GameResponses['init_state'] = {
-      roomId,
-      deck: room.deck,
-      mySecret: player.secretCard,
-      opponentRemaining: otherPlayer?.remaining || 20
-    };
-
-    return { success: true, initData };
+    // Don't send init_state here since game hasn't started yet
+    // Just return success, init_state will be sent when game starts
+    return { success: true };
   }
 
-  updatePlayerRemaining(playerId: string, remaining: number): { success: boolean; broadcastData?: GameResponses['update_remaining'] } {
-    const room = this.roomManager.findRoomByPlayerId(playerId);
+  setPlayerReady(roomId: string, playerId: string): { success: boolean; allReady?: boolean; room?: Room, player?: Player } {
+    return this.roomManager.setPlayerReady(roomId, playerId);
+  }
+
+  updatePlayerRemaining(roomId: string, playerId: string, remaining: number): { success: boolean; broadcastData?: GameResponses['update_remaining'] } {
+    const room = this.roomManager.getRoom(roomId);
     if (!room) {
       return { success: false };
     }
@@ -43,7 +39,7 @@ export class GameManager {
 
     player.remaining = remaining;
 
-    const broadcastData: GameResponses['update_remaining'] = {
+    const broadcastData: GameResponses[SocketEvent.UPDATE_REMAINING] = {
       from: player.nickname,
       remaining
     };
@@ -51,8 +47,8 @@ export class GameManager {
     return { success: true, broadcastData };
   }
 
-  makeGuess(playerId: string, cardId: string): { success: boolean; result?: GameResponses['result'] } {
-    const room = this.roomManager.findRoomByPlayerId(playerId);
+  makeGuess(roomId: string, playerId: string, cardId: string): { success: boolean; result?: GameResponses[SocketEvent.RESULT] } {
+    const room = this.roomManager.getRoom(roomId);
     if (!room || room.status !== GameStatus.PLAYING) {
       return { success: false };
     }
@@ -69,9 +65,9 @@ export class GameManager {
 
     room.status = GameStatus.FINISHED;
 
-    const result: GameResponses['result'] = {
+    const result: GameResponses[SocketEvent.RESULT] = {
       winner,
-      correctCard: otherPlayer.secretCard,
+      correctCard: otherPlayer.secretCard || '',
       guesser: guessingPlayer.nickname,
       guessedCard: cardId
     };
@@ -79,8 +75,8 @@ export class GameManager {
     return { success: true, result };
   }
 
-  handleVoiceData(playerId: string, voiceData: any): { success: boolean; broadcastData?: GameResponses['voice'] } {
-    const room = this.roomManager.findRoomByPlayerId(playerId);
+  handleVoiceData(roomId: string, playerId: string, voiceData: any): { success: boolean; broadcastData?: GameResponses['voice'] } {
+    const room = this.roomManager.getRoom(roomId);
     if (!room) {
       return { success: false };
     }
@@ -93,8 +89,8 @@ export class GameManager {
     return { success: true, broadcastData };
   }
 
-  getGameState(playerId: string): { room?: Room; player?: Player; opponent?: Player } {
-    const room = this.roomManager.findRoomByPlayerId(playerId);
+  getGameState(roomId: string, playerId: string): { room?: Room; player?: Player; opponent?: Player } {
+    const room = this.roomManager.getRoom(roomId);
     if (!room) {
       return {};
     }
@@ -107,6 +103,10 @@ export class GameManager {
 
   isGameReady(roomId: string): boolean {
     const room = this.roomManager.getRoom(roomId);
-    return room?.players.size === 2 && room.status === 'playing';
+    return room?.players.size === 2 && room.status === GameStatus.PLAYING;
+  }
+
+  removePlayerFromRoom(playerId: string, roomId: string): { success: boolean } {
+    return this.roomManager.removePlayerFromRoom(playerId, roomId);
   }
 }

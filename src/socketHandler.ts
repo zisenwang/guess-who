@@ -1,39 +1,44 @@
 import { Socket, Server } from 'socket.io';
 import { GameManager } from './gameManager';
-import { GameEvents } from './types';
+import {GameEvents, SocketEvent} from './types';
 import { Logger } from './logger';
+import {RoomManager} from "./roomManager";
 
 export class SocketHandler {
   constructor(
     private io: Server,
-    private gameManager: GameManager
+    private gameManager: GameManager,
+    private roomManager: RoomManager
   ) {}
 
   handleConnection(socket: Socket): void {
     Logger.player(socket.id, 'connected');
 
-    socket.on('join_room', (data: GameEvents['join_room']) => {
+    socket.on(SocketEvent.JOIN_ROOM, (data: GameEvents[SocketEvent.JOIN_ROOM]) => {
       this.handleJoinRoom(socket, data);
     });
 
-    socket.on('update_remaining', (data: GameEvents['update_remaining']) => {
+    socket.on(SocketEvent.UPDATE_REMAINING, (data: GameEvents[SocketEvent.UPDATE_REMAINING]) => {
       this.handleUpdateRemaining(socket, data);
     });
 
-    socket.on('guess', (data: GameEvents['guess']) => {
+    socket.on(SocketEvent.GUESS, (data: GameEvents[SocketEvent.GUESS]) => {
       this.handleGuess(socket, data);
     });
 
-    socket.on('voice', (data: GameEvents['voice']) => {
+    socket.on(SocketEvent.VOICE, (data: GameEvents[SocketEvent.VOICE]) => {
       this.handleVoice(socket, data);
     });
 
-    socket.on('disconnect', () => {
+    socket.on(SocketEvent.READY, (data: GameEvents[SocketEvent.READY]) => {
+      this.handleReady(socket, data);
+    })
+    socket.on(SocketEvent.DISCONNECT, () => {
       this.handleDisconnect(socket);
     });
   }
 
-  private handleJoinRoom(socket: Socket, { roomId, nickname }: GameEvents['join_room']): void {
+  private handleJoinRoom(socket: Socket, { roomId, nickname }: GameEvents[SocketEvent.JOIN_ROOM]): void {
     Logger.player(socket.id, `joining room ${roomId}`, { nickname });
 
     const result = this.gameManager.joinGame(socket.id, roomId, nickname);
@@ -46,67 +51,102 @@ export class SocketHandler {
 
     socket.join(roomId);
 
-    // Send initial state to the joining player
-    socket.emit('init_state', result.initData);
+    const room = this.roomManager.getRoom(roomId);
+    socket.emit(SocketEvent.ROOM_INFO, {
+      roomId,
+      players: Array.from(room!.players.values()).map(p => ({
+        id: p.id,
+        nickname: p.nickname
+      }))
+    })
 
-    // If game is ready (2 players), send init state to both players
-    if (this.gameManager.isGameReady(roomId)) {
-      Logger.game(`Game started in room ${roomId}`);
-      const { room } = this.gameManager.getGameState(socket.id);
-      if (room) {
-        room.players.forEach((player, playerId) => {
-          const { player: currentPlayer, opponent } = this.gameManager.getGameState(playerId);
-          if (currentPlayer && opponent) {
-            this.io.to(playerId).emit('init_state', {
-              roomId,
-              deck: room.deck,
-              mySecret: currentPlayer.secretCard,
-              opponentRemaining: opponent.remaining
-            });
-          }
-        });
-      }
-    }
+    // Notify other players that someone joined
+    socket.to(roomId).emit(SocketEvent.PLAYER_JOINED, {
+      nickname,
+      id: socket.id
+    });
+
+    // Game will start when both players are ready, not immediately when room is full
   }
 
-  private handleUpdateRemaining(socket: Socket, { remaining }: GameEvents['update_remaining']): void {
+  private handleUpdateRemaining(socket: Socket, { roomId, remaining }: GameEvents[SocketEvent.UPDATE_REMAINING]): void {
     Logger.player(socket.id, `updated remaining cards`, { remaining });
-    const result = this.gameManager.updatePlayerRemaining(socket.id, remaining);
+    const result = this.gameManager.updatePlayerRemaining(roomId, socket.id, remaining);
 
     if (result.success && result.broadcastData) {
-      const { room } = this.gameManager.getGameState(socket.id);
-      if (room) {
-        socket.to(room.id).emit('update_remaining', result.broadcastData);
-      }
+      socket.to(roomId).emit(SocketEvent.UPDATE_REMAINING, result.broadcastData);
     }
   }
 
-  private handleGuess(socket: Socket, { cardId }: GameEvents['guess']): void {
+  private handleGuess(socket: Socket, { roomId, cardId }: GameEvents[SocketEvent.GUESS]): void {
     Logger.player(socket.id, `made a guess`, { cardId });
-    const result = this.gameManager.makeGuess(socket.id, cardId);
+    const result = this.gameManager.makeGuess(roomId, socket.id, cardId);
 
     if (result.success && result.result) {
-      const { room } = this.gameManager.getGameState(socket.id);
-      if (room) {
-        Logger.game(`Game ended in room ${room.id}`, result.result);
-        this.io.to(room.id).emit('result', result.result);
-      }
+      Logger.game(`Game ended in room ${roomId}`, result.result);
+      this.io.to(roomId).emit(SocketEvent.RESULT, result.result);
     }
   }
 
-  private handleVoice(socket: Socket, voiceData: any): void {
-    const result = this.gameManager.handleVoiceData(socket.id, voiceData);
+  private handleVoice(socket: Socket, { roomId, data }: GameEvents[SocketEvent.VOICE]): void {
+    const result = this.gameManager.handleVoiceData(roomId, socket.id, data);
 
     if (result.success && result.broadcastData) {
-      const { room } = this.gameManager.getGameState(socket.id);
-      if (room) {
-        socket.to(room.id).emit('voice', result.broadcastData);
-      }
+      socket.to(roomId).emit(SocketEvent.VOICE, result.broadcastData);
+    }
+  }
+
+  private handleReady(socket: Socket, { roomId }: GameEvents[SocketEvent.READY]): void {
+    Logger.player(socket.id, `marked ready in room ${roomId}`);
+
+    const result = this.gameManager.setPlayerReady(roomId, socket.id);
+
+    if (!result.success) {
+      socket.emit(SocketEvent.ERROR, { message: 'Failed to set ready status' });
+      return;
+    }
+
+    // Notify other players that this player is ready
+    socket.to(roomId).emit(SocketEvent.PLAYER_READY, {
+      nickname: result.player!.nickname,
+      id: socket.id
+    });
+
+    // If all players are ready, start the game
+    if (result.allReady && result.room) {
+      Logger.game(`All players ready, starting game in room ${roomId}`);
+
+      // Send game started event with cards to all players
+      result.room.players.forEach((player, playerId) => {
+        this.io.to(playerId).emit(SocketEvent.GAME_STARTED, {
+          roomId,
+          deck: result.room!.deck,
+          mySecret: player.secretCard
+        });
+      });
     }
   }
 
   private handleDisconnect(socket: Socket): void {
     Logger.player(socket.id, 'disconnected');
-    // GameManager will handle cleanup through RoomManager
+
+    // Find and remove player from their room
+    // Since we don't have roomId in disconnect, we need to search for the player
+    const room = this.roomManager.findRoomByPlayerId(socket.id);
+    if (room) {
+      const player = room.players.get(socket.id);
+      const nickname = player?.nickname || 'Unknown';
+
+      Logger.player(socket.id, `leaving room ${room.id}`);
+
+      // Notify other players in the room about disconnection BEFORE removing
+      socket.to(room.id).emit(SocketEvent.PLAYER_DISCONNECTED, {
+        id: socket.id,
+        nickname
+      });
+
+      // Remove player from room
+      this.roomManager.removePlayerFromRoom(socket.id, room.id);
+    }
   }
 }

@@ -16,7 +16,7 @@ const io = new Server(httpServer, {
 // Initialize managers
 const roomManager = new RoomManager();
 const gameManager = new GameManager(roomManager);
-const socketHandler = new SocketHandler(io, gameManager);
+const socketHandler = new SocketHandler(io, gameManager, roomManager);
 
 // Handle connections
 io.on('connection', (socket) => {
