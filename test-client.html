@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Game Server Test</title>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .controls { margin: 10px 0; }
+        .controls input, button { margin: 5px; padding: 5px; }
+        #output { border: 1px solid #ccc; padding: 10px; height: 300px; overflow-y: scroll; background: #f9f9f9; }
+        .message { margin: 2px 0; padding: 2px; }
+        .connected { color: green; }
+        .error { color: red; }
+        .game { color: blue; }
+    </style>
+</head>
+<body>
+    <h1>Socket.IO Game Server Test</h1>
+
+    <div class="controls">
+        <input id="nickname" placeholder="Enter nickname" value="Player1">
+        <input id="roomId" placeholder="Enter room ID" value="room123">
+        <button onclick="joinRoom()">Join Room</button>
+        <button onclick="disconnect()">Disconnect</button>
+    </div>
+
+    <div class="controls">
+        <button onclick="updateRemaining(15)">Set Remaining: 15</button>
+        <button onclick="updateRemaining(10)">Set Remaining: 10</button>
+        <button onclick="makeGuess('card_1')">Guess: card_1</button>
+        <button onclick="makeGuess('card_5')">Guess: card_5</button>
+    </div>
+
+    <div class="controls">
+        <button onclick="clearOutput()">Clear Output</button>
+    </div>
+
+    <div id="output"></div>
+
+    <script>
+        let socket = null;
+        const output = document.getElementById('output');
+
+        function log(message, className = '') {
+            const div = document.createElement('div');
+            div.className = `message ${className}`;
+            div.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            output.appendChild(div);
+            output.scrollTop = output.scrollHeight;
+        }
+
+        function connect() {
+            socket = io('http://localhost:3001');
+
+            socket.on('connect', () => {
+                log('✅ Connected to server', 'connected');
+            });
+
+            socket.on('disconnect', () => {
+                log('❌ Disconnected from server', 'error');
+            });
+
+            socket.on('init_state', (data) => {
+                log('🎮 Game initialized: ' + JSON.stringify(data), 'game');
+            });
+
+            socket.on('update_remaining', (data) => {
+                log('📊 Remaining updated: ' + JSON.stringify(data), 'game');
+            });
+
+            socket.on('result', (data) => {
+                log('🏆 Game result: ' + JSON.stringify(data), 'game');
+            });
+
+            socket.on('voice', (data) => {
+                log('🎤 Voice data received: ' + JSON.stringify(data), 'game');
+            });
+
+            socket.on('error', (data) => {
+                log('❌ Error: ' + JSON.stringify(data), 'error');
+            });
+        }
+
+        function joinRoom() {
+            if (!socket) connect();
+
+            const nickname = document.getElementById('nickname').value;
+            const roomId = document.getElementById('roomId').value;
+
+            if (!nickname || !roomId) {
+                log('❌ Please enter nickname and room ID', 'error');
+                return;
+            }
+
+            log(`🚀 Joining room "${roomId}" as "${nickname}"`);
+            socket.emit('join_room', { roomId, nickname });
+        }
+
+        function updateRemaining(count) {
+            if (!socket) {
+                log('❌ Not connected to server', 'error');
+                return;
+            }
+
+            log(`📊 Updating remaining cards to ${count}`);
+            socket.emit('update_remaining', { remaining: count });
+        }
+
+        function makeGuess(cardId) {
+            if (!socket) {
+                log('❌ Not connected to server', 'error');
+                return;
+            }
+
+            log(`🎯 Making guess: ${cardId}`);
+            socket.emit('guess', { cardId });
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                log('🔌 Disconnected', 'error');
+            }
+        }
+
+        function clearOutput() {
+            output.innerHTML = '';
+        }
+
+        // Auto-connect on page load
+        connect();
+
+        log('🌐 Test client loaded. Click "Join Room" to start testing!');
+    </script>
+</body>
+</html>
