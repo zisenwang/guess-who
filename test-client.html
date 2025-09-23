@@ -26,6 +26,7 @@
     </div>
 
     <div class="controls">
+        <button onclick="markReady()">Ready</button>
         <button onclick="updateRemaining(15)">Set Remaining: 15</button>
         <button onclick="updateRemaining(10)">Set Remaining: 10</button>
         <button onclick="makeGuess('card_1')">Guess: card_1</button>
@@ -77,9 +78,25 @@
                 log('🎤 Voice data received: ' + JSON.stringify(data), 'game');
             });
 
+            socket.on('player_joined', (data) => {
+                log('🏃‍♂️ Player joined: ' + JSON.stringify(data), 'game');
+            });
+
+            socket.on('player_ready', (data) => {
+                log('✅ Player ready: ' + JSON.stringify(data), 'game');
+            });
+
+            socket.on('game_started', (data) => {
+                log('🎮 Game started: ' + JSON.stringify(data), 'game');
+            });
+
             socket.on('error', (data) => {
                 log('❌ Error: ' + JSON.stringify(data), 'error');
             });
+
+            socket.on('room_info', (data) => {
+                log('👓 Current room info: ' + JSON.stringify(data), 'game');
+            })
         }
 
         function joinRoom() {
@@ -97,14 +114,36 @@
             socket.emit('join_room', { roomId, nickname });
         }
 
+        function markReady() {
+            if (!socket) {
+                log('❌ Not connected to server', 'error');
+                return;
+            }
+
+            const roomId = document.getElementById('roomId').value;
+            if (!roomId) {
+                log('❌ Please enter room ID first', 'error');
+                return;
+            }
+
+            log(`✅ Marking ready in room ${roomId}`);
+            socket.emit('ready', { roomId });
+        }
+
         function updateRemaining(count) {
             if (!socket) {
                 log('❌ Not connected to server', 'error');
                 return;
             }
 
+            const roomId = document.getElementById('roomId').value;
+            if (!roomId) {
+                log('❌ Please enter room ID first', 'error');
+                return;
+            }
+
             log(`📊 Updating remaining cards to ${count}`);
-            socket.emit('update_remaining', { remaining: count });
+            socket.emit('update_remaining', { roomId, remaining: count });
         }
 
         function makeGuess(cardId) {
@@ -113,8 +152,14 @@
                 return;
             }
 
+            const roomId = document.getElementById('roomId').value;
+            if (!roomId) {
+                log('❌ Please enter room ID first', 'error');
+                return;
+            }
+
             log(`🎯 Making guess: ${cardId}`);
-            socket.emit('guess', { cardId });
+            socket.emit('guess', { roomId, cardId });
         }
 
         function disconnect() {
