@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import Image from 'next/image';
@@ -125,7 +125,7 @@ export default function GameRoom() {
       }
       newSocket.close();
     };
-  }, [roomId, nickname, playReceivedAudio]);
+  }, [roomId, nickname]);
 
   const handleReady = () => {
     if (!socket) return;
@@ -212,12 +212,12 @@ export default function GameRoom() {
     }
   };
 
-  const playReceivedAudio = useCallback((base64Audio: string) => {
+  const playReceivedAudio = (base64Audio: string) => {
     const audio = new Audio(base64Audio);
     audio.play().catch(error => {
       console.error('Error playing received audio:', error);
     });
-  }, []);
+  };
 
   const myRemaining = gameState.deck.length - flippedCards.size;
   const opponentPlayer = gameState.players.find(p => p.nickname !== nickname);
