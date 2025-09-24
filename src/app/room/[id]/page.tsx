@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
+import Image from 'next/image';
 
 type GameStatus = 'waiting' | 'full' | 'playing' | 'finished';
 
@@ -43,6 +44,9 @@ export default function GameRoom() {
   const [flippedCards, setFlippedCards] = useState<Set<string>>(new Set());
   const [isReady, setIsReady] = useState(false);
   const [selectedGuessCard, setSelectedGuessCard] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
 
   useEffect(() => {
     if (!nickname) return;
@@ -102,12 +106,20 @@ export default function GameRoom() {
       }));
     });
 
+    newSocket.on('voice', (data) => {
+      console.log('Received voice data:', data);
+      playReceivedAudio(data.data);
+    });
+
     newSocket.on('error', (data) => {
       console.error('Socket error:', data);
       alert(data.message);
     });
 
     return () => {
+      if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+      }
       newSocket.close();
     };
   }, [roomId, nickname]);
@@ -143,6 +155,65 @@ export default function GameRoom() {
     if (confirmed) {
       socket.emit('guess', { roomId, cardId: selectedGuessCard });
     }
+  };
+
+  const initializeAudio = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setAudioStream(stream);
+      return stream;
+    } catch (error) {
+      console.error('Error accessing microphone:', error);
+      alert('Could not access microphone. Please allow microphone access for voice chat.');
+      return null;
+    }
+  };
+
+  const startRecording = async () => {
+    let stream = audioStream;
+    if (!stream) {
+      stream = await initializeAudio();
+      if (!stream) return;
+    }
+
+    const recorder = new MediaRecorder(stream);
+    const audioChunks: BlobPart[] = [];
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunks.push(event.data);
+      }
+    };
+
+    recorder.onstop = () => {
+      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64Audio = reader.result as string;
+        if (socket) {
+          socket.emit('voice', { roomId, data: base64Audio });
+        }
+      };
+      reader.readAsDataURL(audioBlob);
+    };
+
+    recorder.start();
+    setMediaRecorder(recorder);
+    setIsRecording(true);
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const playReceivedAudio = (base64Audio: string) => {
+    const audio = new Audio(base64Audio);
+    audio.play().catch(error => {
+      console.error('Error playing received audio:', error);
+    });
   };
 
   const myRemaining = gameState.deck.length - flippedCards.size;
@@ -228,21 +299,32 @@ export default function GameRoom() {
           {/* Left Side - Card Grid (4/5 width) */}
           <div className="flex-[4] bg-white rounded-lg shadow-md p-4 flex flex-col">
             <h2 className="text-lg font-semibold mb-3">Character Cards</h2>
-            <div className="grid grid-cols-5 grid-rows-4 gap-2 flex-1 max-h-full">
+            <div className="grid grid-cols-10 grid-rows-2 gap-2 flex-1 max-h-full">
               {gameState.deck.map((cardId) => (
                 <div key={cardId} className="relative min-h-0">
                   <div
                     onClick={() => gameState.status === 'playing' && handleCardFlip(cardId)}
                     className={`
-                      w-full h-full rounded-md border-2 cursor-pointer transition-all duration-200 flex items-center justify-center text-xs font-bold min-h-[60px] max-h-[120px]
+                      w-full h-full rounded-md border-2 cursor-pointer transition-all duration-200 overflow-hidden relative min-h-[60px]
                       ${flippedCards.has(cardId)
-                        ? 'bg-gray-300 border-gray-400 opacity-50 line-through'
-                        : 'bg-blue-100 border-blue-300 hover:bg-blue-200'
+                        ? 'border-gray-400 opacity-30'
+                        : 'border-blue-300 hover:border-blue-500'
                       }
                       ${gameState.status !== 'playing' ? 'cursor-not-allowed opacity-75' : ''}
                     `}
                   >
-                    {cardId}
+                    <Image
+                      src={`/characters/${cardId}.png`}
+                      alt={cardId}
+                      fill
+                      className={`${flippedCards.has(cardId) ? 'grayscale' : ''}`}
+                      sizes="(max-width: 768px) 20vw, 15vw"
+                    />
+                    {flippedCards.has(cardId) && (
+                      <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                        <span className="text-white font-bold text-lg">❌</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -254,10 +336,44 @@ export default function GameRoom() {
             {/* Secret Card Display */}
             <div className="bg-white rounded-lg shadow-md p-4">
               <h3 className="text-sm font-semibold mb-2 text-gray-700">Your Secret Card</h3>
-              <div className="aspect-square bg-green-100 border-2 border-green-400 rounded-lg flex items-center justify-center font-bold text-green-700">
-                {gameState.mySecret || 'Not assigned'}
+              <div className="aspect-square border-2 border-green-400 rounded-lg overflow-hidden relative">
+                {gameState.mySecret ? (
+                  <Image
+                    src={`/characters/${gameState.mySecret}.png`}
+                    alt={gameState.mySecret}
+                    fill
+                    className="object-cover"
+                    sizes="150px"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-green-100 flex items-center justify-center font-bold text-green-700">
+                    Not assigned
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Voice Chat */}
+            {gameState.status === 'playing' && (
+              <div className="bg-white rounded-lg shadow-md p-4">
+                <h3 className="text-sm font-semibold mb-3 text-gray-700">Voice Chat</h3>
+                <button
+                  onMouseDown={startRecording}
+                  onMouseUp={stopRecording}
+                  onMouseLeave={stopRecording}
+                  className={`w-full py-3 px-4 rounded-md font-semibold transition-colors ${
+                    isRecording
+                      ? 'bg-red-500 text-white'
+                      : 'bg-blue-500 hover:bg-blue-600 text-white'
+                  }`}
+                >
+                  {isRecording ? '🎤 Recording...' : '🎤 Hold to Talk'}
+                </button>
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  Hold down to record voice message
+                </p>
+              </div>
+            )}
 
             {/* Guess Selection */}
             {gameState.status === 'playing' && (

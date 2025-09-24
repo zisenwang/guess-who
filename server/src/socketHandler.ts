@@ -85,6 +85,8 @@ export class SocketHandler {
   private handleVoice(socket: Socket, { roomId, data }: GameEvents[SocketEvent.VOICE]): void {
     const result = this.gameManager.handleVoiceData(roomId, socket.id, data);
 
+    Logger.player(socket.id, `sent voice data`, { data });
+
     if (result.success && result.broadcastData) {
       socket.to(roomId).emit(SocketEvent.VOICE, result.broadcastData);
     }
