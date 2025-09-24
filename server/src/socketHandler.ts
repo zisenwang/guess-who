@@ -51,20 +51,14 @@ export class SocketHandler {
 
     socket.join(roomId);
 
-    const room = this.roomManager.getRoom(roomId);
-    socket.emit(SocketEvent.ROOM_INFO, {
-      roomId,
-      players: Array.from(room!.players.values()).map(p => ({
-        id: p.id,
-        nickname: p.nickname
-      }))
-    })
-
     // Notify other players that someone joined
     socket.to(roomId).emit(SocketEvent.PLAYER_JOINED, {
       nickname,
       id: socket.id
     });
+
+    // Broadcast the room info
+    this.broadcastRoomInfo(roomId);
 
     // Game will start when both players are ready, not immediately when room is full
   }
@@ -147,6 +141,19 @@ export class SocketHandler {
 
       // Remove player from room
       this.roomManager.removePlayerFromRoom(socket.id, room.id);
+    }
+  }
+
+  private broadcastRoomInfo(roomId: string): void {
+    const result = this.gameManager.getGameState(roomId);
+    if (!result || !result.players || result.players.length === 0) {
+      Logger.warn(`No room data or players found for room ${roomId}`);
+      return;
+    }
+
+    Logger.debug(`Broadcasting room info to ${result.players.length} players: ${JSON.stringify(result.players.map(p => p.nickname))}`);
+    for (const player of result.players) {
+      this.io.to(player.id).emit(SocketEvent.ROOM_INFO, result);
     }
   }
 }

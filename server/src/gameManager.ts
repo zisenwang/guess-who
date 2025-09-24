@@ -1,5 +1,6 @@
 import {GameResponses, GameStatus, Player, Room, SocketEvent} from './types';
 import {RoomManager} from './roomManager';
+import {Logger} from "./logger";
 
 export class GameManager {
   constructor(private roomManager: RoomManager) {}
@@ -63,11 +64,16 @@ export class GameManager {
     const isCorrect = cardId === otherPlayer.secretCard;
     const winner = isCorrect ? guessingPlayer.nickname : otherPlayer.nickname;
 
+    const correctCard = [
+      {player: guessingPlayer.id, card: guessingPlayer.secretCard!},
+      {player: otherPlayer.id, card: otherPlayer.secretCard!}
+    ]
+
     room.status = GameStatus.FINISHED;
 
     const result: GameResponses[SocketEvent.RESULT] = {
       winner,
-      correctCard: otherPlayer.secretCard || '',
+      correctCard: correctCard,
       guesser: guessingPlayer.nickname,
       guessedCard: cardId
     };
@@ -89,16 +95,17 @@ export class GameManager {
     return { success: true, broadcastData };
   }
 
-  getGameState(roomId: string, playerId: string): { room?: Room; player?: Player; opponent?: Player } {
+  getGameState(roomId: string): GameResponses[SocketEvent.ROOM_INFO] | undefined {
     const room = this.roomManager.getRoom(roomId);
     if (!room) {
-      return {};
+      return undefined;
     }
 
-    const player = room.players.get(playerId);
-    const opponent = Array.from(room.players.values()).find(p => p.id !== playerId);
+    // Convert Map to Array for JSON serialization
+    const players = Array.from(room.players.values());
+    const status = room.status;
 
-    return { room, player, opponent };
+    return { roomId, players, status };
   }
 
   isGameReady(roomId: string): boolean {

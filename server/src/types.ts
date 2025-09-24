@@ -52,7 +52,7 @@ export interface GameResponses {
   };
   result: {
     winner: string;
-    correctCard: string;
+    correctCard: {player: string, card: string}[];
     guesser: string;
     guessedCard: string;
   };
@@ -65,7 +65,7 @@ export interface GameResponses {
   };
   room_info: {
     roomId: string;
-    players: Map<string, Player>;
+    players: Player[];
     status: GameStatus;
   };
 }
