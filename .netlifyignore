@@ -1,0 +1,8 @@
+server/
+render.yaml
+.vercelignore
+vercel.json
+*.md
+README.md
+.git/
+node_modules/
