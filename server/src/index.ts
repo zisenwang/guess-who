@@ -5,7 +5,15 @@ import { GameManager } from './gameManager';
 import { SocketHandler } from './socketHandler';
 import { Logger } from './logger';
 
-const httpServer = createServer();
+const httpServer = createServer((req, res) => {
+  if (req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', timestamp: new Date().toISOString() }));
+  } else {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end('<h1>Guess Who Server is running!</h1><p>Socket.IO server is active.</p>');
+  }
+});
 
 // CORS configuration for production and development
 const corsOrigins = process.env.NODE_ENV === 'production'

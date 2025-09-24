@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { io, Socket } from 'socket.io-client';
 import Image from 'next/image';
@@ -51,7 +51,10 @@ export default function GameRoom() {
   useEffect(() => {
     if (!nickname) return;
 
-    const newSocket = io('http://localhost:3001');
+    const newSocket = io('https://your-app-name.onrender.com', {
+      transports: ['websocket', 'polling'],
+      forceNew: true
+    });
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
@@ -122,7 +125,7 @@ export default function GameRoom() {
       }
       newSocket.close();
     };
-  }, [roomId, nickname]);
+  }, [roomId, nickname, playReceivedAudio]);
 
   const handleReady = () => {
     if (!socket) return;
@@ -209,12 +212,12 @@ export default function GameRoom() {
     }
   };
 
-  const playReceivedAudio = (base64Audio: string) => {
+  const playReceivedAudio = useCallback((base64Audio: string) => {
     const audio = new Audio(base64Audio);
     audio.play().catch(error => {
       console.error('Error playing received audio:', error);
     });
-  };
+  }, []);
 
   const myRemaining = gameState.deck.length - flippedCards.size;
   const opponentPlayer = gameState.players.find(p => p.nickname !== nickname);
@@ -277,7 +280,7 @@ export default function GameRoom() {
 
       {gameState.status === 'full' && !isReady && (
         <div className="bg-green-100 border-l-4 border-green-500 text-green-700 p-4 mb-4">
-          <p className="font-bold">Room is full! Click Ready when you're prepared to play.</p>
+          <p className="font-bold">Room is full! Click Ready when you&apos;re prepared to play.</p>
           <button
             onClick={handleReady}
             className="mt-2 bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded font-semibold"
