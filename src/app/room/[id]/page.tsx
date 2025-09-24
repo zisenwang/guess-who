@@ -51,7 +51,7 @@ export default function GameRoom() {
   useEffect(() => {
     if (!nickname) return;
 
-    const newSocket = io('https://your-app-name.onrender.com', {
+    const newSocket = io('https://guess-who-7znx.onrender.com', {
       transports: ['websocket', 'polling'],
       forceNew: true
     });
