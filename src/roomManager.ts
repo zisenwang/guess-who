@@ -4,6 +4,7 @@ import {Logger} from './logger';
 export class RoomManager {
   private rooms = new Map<string, Room>();
 
+  //TODO: refactor this whole class. Currently the roomManager is mixed up with gaming logic
   createRoom(roomId: string): Room {
     if (this.rooms.has(roomId)) {
       return this.rooms.get(roomId)!;
@@ -62,6 +63,7 @@ export class RoomManager {
       return { success: false };
     }
     room.players.delete(playerId);
+    room.status = GameStatus.WAITING;
     if (room.players.size === 0) {
       this.rooms.delete(roomId);
     }
