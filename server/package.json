@@ -1,22 +1,27 @@
 {
-  "name": "server",
+  "name": "guess-who-server",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
     "start": "node dist/index.js",
-    "dev": "nodemon --exec ts-node src/index.ts",
     "build": "tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon --exec ts-node src/index.ts",
+    "postinstall": "npm run build"
   },
-  "keywords": [],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["socket.io", "game", "guess-who"],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Guess Who multiplayer game server",
   "dependencies": {
-    "@types/node": "^24.5.2",
-    "nodemon": "^3.1.10",
     "socket.io": "^4.8.1",
+    "typescript": "^5.9.2",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.2"
+    "@types/node": "^24.5.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
   }
 }

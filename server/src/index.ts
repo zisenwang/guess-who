@@ -6,10 +6,17 @@ import { SocketHandler } from './socketHandler';
 import { Logger } from './logger';
 
 const httpServer = createServer();
+
+// CORS configuration for production and development
+const corsOrigins = process.env.NODE_ENV === 'production'
+  ? [process.env.FRONTEND_URL || "https://your-frontend-domain.vercel.app"]
+  : ["http://localhost:3000", "http://localhost:63342", "*"];
+
 const io = new Server(httpServer, {
   cors: {
-    origin: ["http://localhost:3000","*","http://localhost:63342"],
-    methods: ["GET", "POST"]
+    origin: corsOrigins,
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
