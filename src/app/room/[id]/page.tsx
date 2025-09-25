@@ -51,6 +51,8 @@ export default function GameRoom() {
   useEffect(() => {
     if (!nickname) return;
 
+    // const backend = process.env.NODE_ENV === 'development' ? 'http://localhost:3001' : 'https://guess-who-7znx.onrender.com';
+
     const newSocket = io('https://guess-who-7znx.onrender.com', {
       transports: ['websocket', 'polling'],
       forceNew: true
