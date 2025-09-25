@@ -10,6 +10,7 @@ type GameStatus = 'waiting' | 'full' | 'playing' | 'finished';
 interface Player {
   id: string;
   nickname: string;
+  avatar?: string;
   secretCard: string | null;
   remaining: number;
   isReady: boolean;
@@ -30,6 +31,7 @@ export default function GameRoom() {
   const searchParams = useSearchParams();
   const roomId = params.id as string;
   const nickname = searchParams.get('nickname') || '';
+  const avatar = searchParams.get('avatar') || '👤';
 
   const [socket, setSocket] = useState<Socket | null>(null);
   const [gameState, setGameState] = useState<GameState>({
@@ -44,7 +46,7 @@ export default function GameRoom() {
   const [flippedCards, setFlippedCards] = useState<Set<string>>(new Set());
   const [isReady, setIsReady] = useState(false);
   const [selectedGuessCard, setSelectedGuessCard] = useState<string | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [audioStream, setAudioStream] = useState<MediaStream | null>(null);
 
@@ -125,6 +127,9 @@ export default function GameRoom() {
       if (audioStream) {
         audioStream.getTracks().forEach(track => track.stop());
       }
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        mediaRecorder.stop();
+      }
       newSocket.close();
     };
   }, [roomId, nickname]);
@@ -174,44 +179,42 @@ export default function GameRoom() {
     }
   };
 
-  const startRecording = async () => {
+  const startStreaming = async () => {
     let stream = audioStream;
     if (!stream) {
       stream = await initializeAudio();
       if (!stream) return;
     }
 
-    const recorder = new MediaRecorder(stream);
-    const audioChunks: BlobPart[] = [];
+    const recorder = new MediaRecorder(stream, {
+      mimeType: 'audio/webm;codecs=opus',
+      audioBitsPerSecond: 16000
+    });
 
     recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) {
-        audioChunks.push(event.data);
+      if (event.data.size > 0 && !isMuted && socket) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64Audio = reader.result as string;
+          socket.emit('voice', { roomId, data: base64Audio });
+        };
+        reader.readAsDataURL(event.data);
       }
     };
 
-    recorder.onstop = () => {
-      const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64Audio = reader.result as string;
-        if (socket) {
-          socket.emit('voice', { roomId, data: base64Audio });
-        }
-      };
-      reader.readAsDataURL(audioBlob);
-    };
-
-    recorder.start();
+    recorder.start(200); // Send audio chunks every 200ms
     setMediaRecorder(recorder);
-    setIsRecording(true);
   };
 
-  const stopRecording = () => {
+  const stopStreaming = () => {
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop();
-      setIsRecording(false);
+      setMediaRecorder(null);
     }
+  };
+
+  const toggleMute = () => {
+    setIsMuted(!isMuted);
   };
 
   const playReceivedAudio = (base64Audio: string) => {
@@ -326,7 +329,7 @@ export default function GameRoom() {
                       sizes="(max-width: 768px) 20vw, 15vw"
                     />
                     {flippedCards.has(cardId) && (
-                      <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
                         <span className="text-white font-bold text-lg">❌</span>
                       </div>
                     )}
@@ -362,20 +365,36 @@ export default function GameRoom() {
             {gameState.status === 'playing' && (
               <div className="bg-white rounded-lg shadow-md p-4">
                 <h3 className="text-sm font-semibold mb-3 text-gray-700">Voice Chat</h3>
-                <button
-                  onMouseDown={startRecording}
-                  onMouseUp={stopRecording}
-                  onMouseLeave={stopRecording}
-                  className={`w-full py-3 px-4 rounded-md font-semibold transition-colors ${
-                    isRecording
-                      ? 'bg-red-500 text-white'
-                      : 'bg-blue-500 hover:bg-blue-600 text-white'
-                  }`}
-                >
-                  {isRecording ? '🎤 Recording...' : '🎤 Hold to Talk'}
-                </button>
+                <div className="space-y-3">
+                  <button
+                    onClick={mediaRecorder ? stopStreaming : startStreaming}
+                    className={`w-full py-3 px-4 rounded-md font-semibold transition-colors ${
+                      mediaRecorder
+                        ? 'bg-green-500 hover:bg-green-600 text-white'
+                        : 'bg-blue-500 hover:bg-blue-600 text-white'
+                    }`}
+                  >
+                    {mediaRecorder ? '🔗 Streaming Active' : '🔗 Start Voice Chat'}
+                  </button>
+
+                  {mediaRecorder && (
+                    <button
+                      onClick={toggleMute}
+                      className={`w-full py-3 px-4 rounded-md font-semibold transition-colors ${
+                        isMuted
+                          ? 'bg-red-500 hover:bg-red-600 text-white'
+                          : 'bg-green-500 hover:bg-green-600 text-white'
+                      }`}
+                    >
+                      {isMuted ? '🔇 Unmute' : '🎤 Mute'}
+                    </button>
+                  )}
+                </div>
                 <p className="text-xs text-gray-500 mt-2 text-center">
-                  Hold down to record voice message
+                  {mediaRecorder
+                    ? (isMuted ? 'You are muted' : 'Voice streaming active')
+                    : 'Click to start voice chat'
+                  }
                 </p>
               </div>
             )}
