@@ -1,11 +1,11 @@
 'use client';
 
-import {useEffect, useState} from 'react';
+import {useEffect, useState, Suspense} from 'react';
 import {useRouter, useSearchParams} from 'next/navigation';
 import {ToastType, useSimpleToast} from "@/component/toast";
 import {AVATAR_OPTIONS, DEFAULT_AVATAR_INDEX, getAvatarByIndex} from "@/constants/avatars";
 
-export default function Home() {
+function HomeContent() {
   const [nickname, setNickname] = useState('');
   const [roomId, setRoomId] = useState('');
   const [selectedAvatarIndex, setSelectedAvatarIndex] = useState(DEFAULT_AVATAR_INDEX);
@@ -49,7 +49,7 @@ export default function Home() {
     if (invitedRoomId) {
       setRoomId(invitedRoomId);
     }
-  },[]);
+  }, [invitedRoomId]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center p-4">
@@ -156,5 +156,13 @@ export default function Home() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gradient-to-br from-blue-500 via-purple-500 to-pink-500 flex items-center justify-center"><div className="text-white text-xl">Loading...</div></div>}>
+      <HomeContent />
+    </Suspense>
   );
 }
