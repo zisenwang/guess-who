@@ -218,10 +218,49 @@ export default function GameRoom() {
   };
 
   const playReceivedAudio = (base64Audio: string) => {
-    const audio = new Audio(base64Audio);
-    audio.play().catch(error => {
-      console.error('Error playing received audio:', error);
-    });
+    try {
+      // Extract base64 data from data URL
+      const base64Data = base64Audio.includes('base64,')
+        ? base64Audio.split('base64,')[1]
+        : base64Audio;
+
+      // Convert base64 to array buffer
+      const binaryString = window.atob(base64Data);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+
+      // Create blob with multiple MIME types to try
+      const mimeTypes = ['audio/webm', 'audio/ogg', 'audio/wav', 'audio/mp4'];
+
+      for (const mimeType of mimeTypes) {
+        try {
+          const blob = new Blob([bytes], { type: mimeType });
+          const audioUrl = URL.createObjectURL(blob);
+          const audio = new Audio(audioUrl);
+
+          audio.addEventListener('loadeddata', () => {
+            console.log(`Successfully loaded audio with ${mimeType}`);
+            audio.play().catch(playError => {
+              console.error(`Error playing audio with ${mimeType}:`, playError);
+            });
+          });
+
+          audio.addEventListener('error', (e) => {
+            console.error(`Error loading audio with ${mimeType}:`, e);
+            URL.revokeObjectURL(audioUrl);
+          });
+
+          audio.src = audioUrl;
+          break; // Exit loop on first successful load
+        } catch (blobError) {
+          console.error(`Error creating blob with ${mimeType}:`, blobError);
+        }
+      }
+    } catch (error) {
+      console.error('Error processing received audio:', error);
+    }
   };
 
   const myRemaining = gameState.deck.length - flippedCards.size;
