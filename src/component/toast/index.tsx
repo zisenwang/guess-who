@@ -2,24 +2,31 @@
 
 import React, { useState } from 'react';
 
+export enum ToastType {
+  Success = 'success',
+  Error = 'error',
+  Info = 'info',
+  Warning = 'warning',
+}
+
 interface ToastProps {
   message: string;
-  type?: 'success' | 'error' | 'info' | 'warning';
+  type?: ToastType;
   onClose: () => void;
 }
 
-const ToastComponent: React.FC<ToastProps> = ({ message, type = 'info', onClose }) => {
+const ToastComponent: React.FC<ToastProps> = ({ message, type = ToastType.Info, onClose }) => {
   const getToastStyles = () => {
     const baseStyles = 'fixed top-4 z-50 flex items-center justify-between p-4 rounded-lg shadow-lg transition-all duration-300 transform';
 
     switch (type) {
-      case 'success':
+      case ToastType.Success:
         return `${baseStyles} bg-green-500 text-white`;
-      case 'error':
+      case ToastType.Error:
         return `${baseStyles} bg-red-500 text-white`;
-      case 'warning':
+      case ToastType.Warning:
         return `${baseStyles} bg-yellow-500 text-white`;
-      case 'info':
+      case ToastType.Info:
       default:
         return `${baseStyles} bg-blue-500 text-white`;
     }
@@ -55,9 +62,9 @@ export default ToastComponent;
 
 // Simple toast hook
 export const useSimpleToast = () => {
-  const [toast, setToast] = useState<{ message: string; type: string } | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
-  const showToast = (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'info', duration = 3000) => {
+  const showToast = (message: string, type: ToastType = ToastType.Info, duration = 3000) => {
     setToast({ message, type });
 
     if (duration > 0) {
@@ -75,7 +82,7 @@ export const useSimpleToast = () => {
     return (
       <ToastComponent
         message={toast.message}
-        type={toast.type as any}
+        type={toast.type}
         onClose={hideToast}
       />
     );

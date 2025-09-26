@@ -2,8 +2,8 @@
 
 import {useEffect, useState} from 'react';
 import {useRouter, useSearchParams} from 'next/navigation';
-import { useSimpleToast } from "@/component/toast";
-import { AVATAR_OPTIONS, getAvatarByIndex, DEFAULT_AVATAR_INDEX } from "@/constants/avatars";
+import {ToastType, useSimpleToast} from "@/component/toast";
+import {AVATAR_OPTIONS, DEFAULT_AVATAR_INDEX, getAvatarByIndex} from "@/constants/avatars";
 
 export default function Home() {
   const [nickname, setNickname] = useState('');
@@ -34,14 +34,14 @@ export default function Home() {
   const copyLinkToClipboard = () => {
     const link = `${window.location.origin}/?roomId=${roomId}`;
     if (!roomId) {
-      showToast('Please enter room ID first!', 'error');
+      showToast('Please enter room ID first!', ToastType.Error);
       return;
     }
     navigator.clipboard.writeText(link).then(() => {
-      showToast('Link copied to clipboard!', 'success');
+      showToast('Link copied to clipboard!', ToastType.Success);
     }).catch((err) => {
       console.error('Could not copy text: ', err);
-      showToast('Could not copy link to clipboard!', 'error');
+      showToast('Could not copy link to clipboard!', ToastType.Error);
     })
   }
 
